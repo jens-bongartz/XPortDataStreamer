@@ -1,3 +1,3 @@
-# UDPPortDataStreamer
-Derivative of SerialPortDataStreamer for UDP communication via WLAN
+# XPortDataStreamer
+Derivative of SerialPortDataStreamer with additional capability to communicate via WLAN UDP protocol
 
