@@ -81,9 +81,10 @@ if !isempty(inputPort)
       rec_data = 0;
       dataMatrix = {};
       for i = 1:length(dataStream)
+        ar_index = dataStream(i).ar_index;
         dataMatrix{end+1} = dataStream(i).name;
-        dataMatrix{end+1} = dataStream(i).array;
-        dataMatrix{end+1} = dataStream(i).t;
+        dataMatrix{end+1} = [dataStream(i).array(ar_index:end) dataStream(i).array(1:ar_index-1)];
+        dataMatrix{end+1} = [dataStream(i).t(ar_index:end) dataStream(i).t(1:ar_index-1)];
       endfor
       myfilename = uiputfile();
       if (myfilename != 0)
