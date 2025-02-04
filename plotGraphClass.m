@@ -24,7 +24,7 @@ classdef plotGraphClass < handle
           j=j+1;
           ## The function subplot returns a handle pointing to an object of type axes.
           self.subPl(j) = subplot(spN,1,j);
-          set(self.subPl(j),"box","on","title",dataStream(i).name,"xlim",[0 dataStream(i).plotwidth*dataStream(i).dt]);
+          set(self.subPl(j),"box","on","title",dataStream(i).name,"xlim",[0 dataStream(i).plotwidth*5]);
           # wenn ylim Grenzen nutzt
           if (sum(dataStream(j).ylim != 0))
             set(self.subPl(j),"ylim",dataStream(i).ylim);
@@ -43,7 +43,8 @@ classdef plotGraphClass < handle
       j=0;  # iteriert ueber die subPlot-Instanzen
       for i = 1:length(dataStream);
         # wenn plot == 1 dann wird das array des dataStream geplottet >> adc_plot
-        if (dataStream(i).plot == 1)
+        if (dataStream(i).plot == 1 && dataStream(i).index > 1)
+        #if (dataStream(i).plot == 1)
           j=j+1;
           if (dataStream(i).index > dataStream(i).plotwidth) # Fenster scrollt
              # Hier holt dataStream die letzten N-Samples (N=plotwidth)

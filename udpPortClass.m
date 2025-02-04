@@ -13,7 +13,7 @@ classdef udpPortClass < handle
       close self.port_01;
       disp('Opening UDP Port ... ')
       #udpport gibt Parameter aus
-      self.port_01 = udpport ("LocalHost","192.168.1.4","LocalPort",8266)
+      self.port_01 = udpport ("LocalHost","192.168.1.2","LocalPort",8266)
     endfunction
 
     function clearPort(self)
@@ -21,8 +21,8 @@ classdef udpPortClass < handle
       do
         bytesAvailable = self.port_01.NumBytesAvailable;
         if (bytesAvailable > 0)
-          inUDPPort = char(read(self.port_01,bytesAvailable))
-          posLF     = index(inUDPPort,char(10),"last")
+          inUDPPort = char(read(self.port_01,bytesAvailable));
+          posLF     = index(inUDPPort,char(10),"last");
         endif
       until (posLF > 0);
       # erst ab dem letzten \n geht es los
@@ -32,8 +32,8 @@ classdef udpPortClass < handle
     function [bytesAvailable,inChar] = readPort(self)
       udp_count = 0;
       do
-         udp_count += 1
-         bytesAvailable = self.port_01.NumBytesAvailable
+         udp_count += 1;
+         bytesAvailable = self.port_01.NumBytesAvailable;
          inUDPPort   = char(read(self.port_01,bytesAvailable));
          self.inBuffer  = [self.inBuffer inUDPPort];
       until (self.port_01.NumBytesAvailable == 0)
@@ -46,15 +46,18 @@ classdef udpPortClass < handle
     endfunction
 
     function countMatches = parseInput(self,inChar,dataStream)
-      matches = regexp(inChar, self.regex_pattern, 'tokens'); # Regular Expression auswerten
-      countMatches   = length(matches);                       # Wert wird ausgegeben
+      matches = regexp(inChar, self.regex_pattern, 'tokens');     # Regular Expression auswerten
+      countMatches   = length(matches);                           # Wert wird ausgegeben
+      if (countMatches == 0)
+        disp("RegEx-Error");
+        disp(length(inChar));
+      endif
       for i = 1:countMatches
         streamName = matches{i}{1};
         adc        = str2num(matches{i}{2});
         sample_t   = str2num(matches{i}{3});
         j = self.streamSelector(streamName);     # Sample einem dataStream zuweisen
         dataStream(j).addSample(adc,sample_t);   # Hier uebernimmt dataStream die Arbeit
-        #dataStream(j).addSample(adc,5);   # Hier uebernimmt dataStream die Arbeit
       endfor
     endfunction
 

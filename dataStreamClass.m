@@ -5,10 +5,11 @@ classdef dataStreamClass < handle
         # ar_index >> Counter fuer Ringspeicher
         # index    >> Counter fuer alle Abtastwerte des dataStream
         name      = "";
-        array     = []; ar_index  = 1; length    = 6000; index = 1;
-        t         = []; dt        = 5; t_sum     = 0;
+        array     = []; ar_index  = 1; length = 2000; index = 1;
+        t         = []; t_actual  = 0;
         plotwidth = 800; plot     = 1; plcolor   = "";
         ylim      = 0;    #yalternativ lim = [0 100];
+        ylim      = [-50 150];    #yalternativ lim = [0 100];
         filter    = 1;
         # Filter-Speicher
         HP_sp  = [0 0 0 0 0 0]; NO_sp  = [0 0 0 0 0 0]; TP_sp  = [0 0 0 0 0 0];
@@ -18,6 +19,12 @@ classdef dataStreamClass < handle
         HP_ko  = [0 0 0 0 0]; NO_ko   = [0 0 0 0 0]; TP_ko  = [0 0 0 0 0];
         DQ_ko  = [0 0 0 0 0]; DQ2_ko  = [0 0 0 0 0];
         FIR_ko = [0];
+        # median / mean_filter
+        bufsize = 5;
+        median_index = 1;
+        median_buffer = zeros(1,5);
+        mean_index = 1;
+        mean_buffer = zeros(1,5);
 
         slopeDetector = 0; lastSample = 0; lastSlope = 1; lastMaxTime = 0;
         peakDetector = 0; peakThreshold = 0; peakTrigger = 0; lastPeakTime  = 0;
@@ -28,10 +35,9 @@ classdef dataStreamClass < handle
 
     methods (Access=public)
 
-        function self = dataStreamClass(name,plcolor,dt,plotwidth,plot,filter)
+        function self = dataStreamClass(name,plcolor,plotwidth,plot,filter)
           self.name      = name;
           self.plcolor   = plcolor;
-          self.dt        = dt;
           self.plotwidth = plotwidth;
           self.plot      = plot;
           self.filter    = filter;
@@ -72,8 +78,9 @@ classdef dataStreamClass < handle
           #disp(self.ar_index);
           #disp(sample);
           self.array(self.ar_index)=sample;
-          self.t_sum = self.t_sum + sample_t;
-          self.t(self.ar_index) = self.t_sum;
+
+          self.t_actual = sample_t;
+          self.t(self.ar_index) = sample_t;
 
           self.index = self.index + 1;
           # Ringspeicher Indexing
@@ -134,10 +141,22 @@ classdef dataStreamClass < handle
              [sample,self.HP_sp] = biquadFilter(sample,self.HP_sp,self.HP_ko);
            endif
            if (DQ_filtered)
-             [sample,self.DQ_sp] = biquadFilter(sample,self.DQ_sp,self.DQ_ko);
+             #[sample,self.DQ_sp] = biquadFilter(sample,self.DQ_sp,self.DQ_ko);
+             self.median_buffer(self.median_index) = sample;
+             sample = median(self.median_buffer);
+             self.median_index += 1;
+             if self.median_index > self.bufsize
+               self.median_index = 1;
+             endif
            endif
            if (DQ2_filtered)
-             [sample,self.DQ2_sp] = biquadFilter(sample,self.DQ2_sp,self.DQ2_ko);
+             #[sample,self.DQ2_sp] = biquadFilter(sample,self.DQ2_sp,self.DQ2_ko);
+             self.mean_buffer(self.mean_index) = sample;
+             sample = mean(self.mean_buffer);
+             self.mean_index += 1;
+             if self.mean_index > self.bufsize
+               self.mean_index = 1;
+             endif
            endif
         endfunction
 
@@ -145,9 +164,9 @@ classdef dataStreamClass < handle
           slope = sign(sample - self.lastSample);
           if (slope ~= self.lastSlope)
             if (slope < self.lastSlope) # Ubergang 1 >> -1 = Maximum
-              if (self.t_sum - self.lastMaxTime > 50)
-               self.BPM = round(60000 / (self.t_sum - self.lastMaxTime));
-               self.lastMaxTime = self.t_sum;
+              if (self.t_actual - self.lastMaxTime > 50)
+               self.BPM = round(60000 / (self.t_actual - self.lastMaxTime));
+               self.lastMaxTime = self.t_actual;
               endif
             endif
           endif
@@ -166,9 +185,9 @@ classdef dataStreamClass < handle
           # und Threshold vergleichen
           if ((sample > self.peakThreshold) && !self.peakTrigger)
             # Doppel-Peaks unterdruecken (50ms)
-            if (self.t_sum - self.lastPeakTime > 50)
-              self.BPM = round(60000 / (self.t_sum - self.lastPeakTime));
-              self.lastPeakTime = self.t_sum;
+            if (self.t_actual - self.lastPeakTime > 50)
+              self.BPM = round(60000 / (self.t_actual - self.lastPeakTime));
+              self.lastPeakTime = self.t_actual;
               self.peakTrigger = 1;
             endif
           endif
@@ -180,7 +199,7 @@ classdef dataStreamClass < handle
         function clear(self)
           self.index        = 1;
           self.ar_index     = 1;
-          self.t_sum        = 0;
+          self.t_actual     = 0;
           self.lastMaxTime  = 0;
           self.lastPeakTime = 0;
           self.initRingBuffer();
