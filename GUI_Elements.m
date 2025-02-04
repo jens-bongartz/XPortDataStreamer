@@ -43,23 +43,23 @@ function cap = GUI_Elements(fi_1)
     DQ_filtered = not(DQ_filtered);
   endfunction
 
-##  global DQ2_filtered;
-##  cb_DQ2 = uicontrol(fi_1,"style","checkbox","string","DQ2", ...
-##                    "callback",@cb_DQ2_changed,"position",[210,0,90,30], ...
-##                    "value", DQ2_filtered);
-##
-##  function cb_DQ2_changed(~,~);
-##    DQ2_filtered = not(DQ2_filtered);
-##  endfunction
+  global DQ2_filtered;
+  cb_DQ2 = uicontrol(fi_1,"style","checkbox","string","DQ2", ...
+                    "callback",@cb_DQ2_changed,"position",[210,0,90,30], ...
+                    "value", DQ2_filtered);
 
-  global FIR_filtered;
-  cb_FIR = uicontrol(fi_1,"style","checkbox","string","FIR", ...
-                    "callback",@cb_FIR_changed,"position",[210,0,90,30], ...
-                    "value", FIR_filtered);
-
-  function cb_FIR_changed(~,~);
-    FIR_filtered = not(FIR_filtered);
+  function cb_DQ2_changed(~,~);
+    DQ2_filtered = not(DQ2_filtered);
   endfunction
+
+##  global FIR_filtered;
+##  cb_FIR = uicontrol(fi_1,"style","checkbox","string","FIR", ...
+##                    "callback",@cb_FIR_changed,"position",[210,0,90,30], ...
+##                    "value", FIR_filtered);
+##
+##  function cb_FIR_changed(~,~);
+##    FIR_filtered = not(FIR_filtered);
+##  endfunction
 
   # Clear-Button
   Clear_Button = uicontrol(fi_1,"style","pushbutton","string","Clear",...
