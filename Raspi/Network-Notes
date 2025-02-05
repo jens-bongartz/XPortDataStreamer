@@ -1,7 +1,77 @@
 Router: Netgear R6100 mit OpenWrt 18.06.1 r7258-5eb055306f / LuCI openwrt-18.06 branch (git-18.228.31946-f64b152) 
+Router-Login: root / Pwd: raspi01
 Router IP: 192.168.1.1
 
 Raspberry Pi Ethernet: Verbindungsname: Raspi-Net 
 IP: 192.168.1.2
 Gateway: 192.168.1.0
 
+WLAN: "Raspi-Wifi-2.4" ist Access-Point für LAN
+WPA2-PSK mit Pwd: raspi01-wifi 
+Mode: N  Channel: 10  Width: 20 MHz
+
+Octave Code:
+============
+function self = udpPortClass()    # Constructor
+      close self.port_01;
+      disp('Opening UDP Port ... ')
+      #udpport gibt Parameter aus
+      self.port_01 = udpport ("LocalHost","192.168.1.2","LocalPort",8266)
+ endfunction
+
+
+function [bytesAvailable,inChar] = readPort(self)
+      do
+         bytesAvailable = self.port_01.NumBytesAvailable;
+         inUDPPort   = char(read(self.port_01,bytesAvailable));
+         self.inBuffer  = [self.inBuffer inUDPPort];
+      until (self.port_01.NumBytesAvailable == 0)
+      posLF          = index(self.inBuffer,char(10),"last");
+      inChar         = '';
+      if (posLF > 0)
+        inChar   = self.inBuffer(1:posLF);
+        self.inBuffer = self.inBuffer(posLF+1:end);
+      endif
+    endfunction
+
+
+
+NodeMCU 1.0 mit I2C Display (128 x 64) U8g2 Lib
+================================================
+// Wifi einrichten
+const char* ssid = "Raspi-Wifi-2.4";               // Darf bis zu 32 Zeichen haben.
+const char* password = "raspi01-wifi";             // Mindestens 8 Zeichen jedoch nicht länger als 64 Zeichen.
+unsigned long previousMillis = 0;
+WiFiUDP Udp;
+IPAddress unicastIP(192, 168, 1, 2);               // Ziel-IP-Adresse eintragen
+constexpr uint16_t PORT = 8266;
+
+Mit Wifi-verbinden
+==================
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+Paket senden
+============
+#define packetSize 20
+int packetCounter = 0;
+char packetBuffer[25 * packetSize];
+
+void readADC() {
+  int adcValue = adc.getRawResult();
+  char mString[25];
+  sprintf(mString,"FBTAL:%i,t:%lu\r\n", adcValue,millis());
+  strcat(packetBuffer,mString);
+  packetCounter++;
+  if (packetCounter > packetSize-1) {
+     Udp.beginPacket(unicastIP, PORT);
+     Udp.write(packetBuffer);
+     Udp.endPacket();
+     packetCounter = 0;
+     packetBuffer[0] = '\0';
+  }
+}
