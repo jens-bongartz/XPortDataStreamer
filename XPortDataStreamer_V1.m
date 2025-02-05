@@ -42,10 +42,10 @@ global FIR_filtered = 0;
 global quit_prg = 0 clear_data = 0 save_data = 0 rec_data = 1;
 
 # Einstellwerte fuer die Programm-Performance [Sekunden]
-Bench_Time      = 2;       # measurment of load every 2 seconds
-Plot_Time       = 0.1;
-SerialPort_Time = 0.04;   # alle 40ms (25 Hz) werden Daten empfangen
-Pause_Time      = 0.05;
+Bench_Time   = 2;       # measurment of load every 2 seconds
+Plot_Time    = 0.03;
+Port_Time    = 0.03;    # alle 30ms (33 Hz) werden Daten empfangen
+Pause_Time   = 0.02;
 
 # Der weitere Teil wird nur ausgefuehrt, wenn serielle Schnittstelle gefunden wurde
 if !isempty(inputPort)
@@ -59,18 +59,18 @@ if !isempty(inputPort)
   # =============
   datasetCounter = 0; datasetCounter_tic = 0; bytesReceived = 0;
 
-  bench_tic = tic(); plot_tic = tic(); serial_tic = tic();
+  bench_tic = tic(); plot_tic = tic(); port_tic = tic();
   [t_cpu_prev,t_user_prev,t_sys_prev] = cputime();
 
   do
-    ## CLear-Button
+    ## Clear-Button
     if (clear_data)
       j = 0;
       for i = 1:length(dataStream);
         dataStream(i).clear;
         if (dataStream(i).plot > 0)
           j = j + 1;
-          set(plotGraph.subPl(j),"xlim",[0 dataStream(i).plotwidth*dataStream(i).dt]);
+          set(plotGraph.subPl(j),"xlim",[0 dataStream(i).plotwidth*5]);
         endif
       endfor
       datasetCounter = 0;  datasetCounter_prev = 0;
@@ -95,8 +95,8 @@ if !isempty(inputPort)
 
     # Port auslesen
     # =============
-    s_toc = toc(serial_tic);
-    if (s_toc > SerialPort_Time)
+    po_toc = toc(port_tic);
+    if (po_toc > Port_Time)
       [bytesAvailable,inChar] = inputPort.readPort();  # >> inputPort.inBuffer;
       bytesReceived = bytesReceived + bytesAvailable;
       if (rec_data)   # Wird vom REC-Button gesteuert
@@ -106,8 +106,8 @@ if !isempty(inputPort)
            datasetCounter_tic = datasetCounter_tic + countMatches; # datasetCounter_tic >> Bench_Time
         endif
       endif
-      serial_tic = tic();
-    endif # s_toc
+      port_tic = tic();
+    endif # po_toc
 
     # Plot-Graphikfenster
     # ===================
@@ -127,8 +127,8 @@ if !isempty(inputPort)
     # ============
     b_toc = toc(bench_tic);
     if (b_toc > Bench_Time)
-      # Empfangene Bytes pro Sekunde
-      f_oct = round(datasetCounter_tic/b_toc);
+      # Abtastrate geschaetzt
+      f_abtast = round(datasetCounter_tic/b_toc);
       datasetCounter_tic = 0;
       bytesPerSecond = round(bytesReceived / b_toc);
       bytesReceived = 0;
@@ -140,9 +140,10 @@ if !isempty(inputPort)
       t_user_prev = t_user;
       t_sys_prev = t_sys;
       if (ishandle(plotGraph.fi_1))
-        set(cap(2),"string",num2str(f_oct));
-        set(cap(3),"string",num2str(b_toc));
-        set(cap(4),"string",num2str(user_load));
+        set(cap(2),"string",num2str(f_abtast));
+#        set(cap(3),"string",num2str(b_toc,"%.2f"));
+        set(cap(3),"string",num2str(sys_load,"%.2f"));
+        set(cap(4),"string",num2str(user_load,"%.2f"));
         set(cap(5),"string",num2str(bytesPerSecond));
         set(cap(6),"string",num2str(countMatches));
       endif # ishandle(fi_1)
