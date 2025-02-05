@@ -1,0 +1,7 @@
+Router: Netgear R6100 mit OpenWrt 18.06.1 r7258-5eb055306f / LuCI openwrt-18.06 branch (git-18.228.31946-f64b152) 
+Router IP: 192.168.1.1
+
+Raspberry Pi Ethernet: Verbindungsname: Raspi-Net 
+IP: 192.168.1.2
+Gateway: 192.168.1.0
+
