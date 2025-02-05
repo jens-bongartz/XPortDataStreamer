@@ -3,7 +3,6 @@ classdef udpPortClass < handle
   properties
     streamSelector = [];
     regex_pattern = '';
-    serialPortPath = '';
     inBuffer = '';
     port_01 = '';
   endproperties
@@ -30,9 +29,7 @@ classdef udpPortClass < handle
     endfunction
 
     function [bytesAvailable,inChar] = readPort(self)
-      udp_count = 0;
       do
-         udp_count += 1;
          bytesAvailable = self.port_01.NumBytesAvailable;
          inUDPPort   = char(read(self.port_01,bytesAvailable));
          self.inBuffer  = [self.inBuffer inUDPPort];
@@ -54,10 +51,10 @@ classdef udpPortClass < handle
       endif
       for i = 1:countMatches
         streamName = matches{i}{1};
-        adc        = str2num(matches{i}{2});
-        sample_t   = str2num(matches{i}{3});
-        j = self.streamSelector(streamName);     # Sample einem dataStream zuweisen
-        dataStream(j).addSample(adc,sample_t);   # Hier uebernimmt dataStream die Arbeit
+        adc        = str2double(matches{i}{2});
+        sample_t   = str2double(matches{i}{3});
+        j = self.streamSelector(streamName);     # Sample wird auf den passenden dataStream geleitet
+        dataStream(j).addSample(adc,sample_t);   # Hier uebernimmt der jeweilige dataStream
       endfor
     endfunction
 
