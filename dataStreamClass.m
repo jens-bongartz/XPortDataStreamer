@@ -69,41 +69,46 @@ classdef dataStreamClass < handle
           # beide Vektoren sind persistent mit dem dataStream Objekt
         endfunction
 
-        function addSample(self,sample,timestamp)
+        function addSample(self,samples,timestamps)
+          for k = 1:length(samples)
 
-          if (self.filter > 0)
-            sample = self.doFilter(sample);  # hier laufen alle Samples durch
-          endif
+            sample = samples(k);
+            timestamp = timestamps(k);
 
-          if (abs(sample) < 0.0001)        # 'dataaspectratio' Error verhindern
-            sample = 0;
-          endif
-
-          self.array(self.ar_index)  = sample;
-          self.t(self.ar_index)      = timestamp;
-          self.t_actual              = timestamp;
-
-          self.index = self.index + 1;
-          # Ringspeicher Indexing
-          self.ar_index = self.ar_index + 1;
-          if (self.ar_index > self.length)
-            self.ar_index = 1;
-          endif
-
-          # Peak-Detector
-          if (self.peakDetector)
-            self.evalCounter = self.evalCounter + 1;
-            # regelmaessig neu Threshold bestimmen
-            if (self.evalCounter > self.evalWindow)
-              self.evalThreshold;
+            if (self.filter > 0)
+              sample = self.doFilter(sample);  # hier laufen alle Samples durch
             endif
-            self.peakDetectorFunction(sample);
-          endif
-          # Slope-Detector
-          if (self.slopeDetector)
-            self.slopeDetectorFunction(sample);
-          endif
-          self.lastSample = sample;
+
+            if (abs(sample) < 0.0001)        # 'dataaspectratio' Error verhindern
+              sample = 0;
+            endif
+
+            self.array(self.ar_index)  = sample;
+            self.t(self.ar_index)      = timestamp;
+            self.t_actual              = timestamp;
+
+            self.index = self.index + 1;
+            # Ringspeicher Indexing
+            self.ar_index = self.ar_index + 1;
+            if (self.ar_index > self.length)
+              self.ar_index = 1;
+            endif
+
+            # Peak-Detector
+            if (self.peakDetector)
+              self.evalCounter = self.evalCounter + 1;
+              # regelmaessig neu Threshold bestimmen
+              if (self.evalCounter > self.evalWindow)
+                self.evalThreshold;
+              endif
+              self.peakDetectorFunction(sample);
+            endif
+            # Slope-Detector
+            if (self.slopeDetector)
+              self.slopeDetectorFunction(sample);
+            endif
+            self.lastSample = sample;
+          endfor
         endfunction
 
 

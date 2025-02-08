@@ -45,7 +45,8 @@ global quit_prg = 0 clear_data = 0 save_data = 0 rec_data = 1;
 Bench_Time   = 2;       # measurment of load every 2 seconds
 Plot_Time    = 0.03;
 Port_Time    = 0.03;    # alle 30ms (33 Hz) werden Daten empfangen
-Pause_Time   = 0.02;
+#Pause_Time   = 0.02;
+Pause_Time   = 0.0;
 
 # Der weitere Teil wird nur ausgefuehrt, wenn serielle Schnittstelle gefunden wurde
 if !isempty(inputPort)

@@ -49,13 +49,33 @@ classdef udpPortClass < handle
         disp("RegEx-Error");
         disp(length(inChar));
       endif
-      for i = 1:countMatches
-        streamName = matches{i}{1};
-        sample     = str2double(matches{i}{2});
-        timestamp  = str2double(matches{i}{3});
-        j = self.streamSelector(streamName);         # Sample wird auf den passenden dataStream geleitet
-        dataStream(j).addSample(sample,timestamp);   # Hier uebernimmt der jeweilige dataStream
-      endfor
+      # Code-Optimierung
+      # ================
+      if countMatches > 0
+        [streamNames, sampleCells, timestampCells] = cellfun(@(x) deal(x{1}, x{2}, x{3}),matches,'UniformOutput',false);
+        samples = str2double(sampleCells);
+        timestamps = str2double(timestampCells);
+        #j_indices = cellfun(@(x) self.streamSelector(x),streamNames);
+        # Hier werden die Daten für die einzelnen dataStreams vorsortiert.
+        # Jeder Datenstrom wird dann nur einmal mit einer Liste aufgerufen.
+        % Erzeuge eine Lookup-Tabelle für eindeutige Stream-Namen
+        uniqueStreams = unique(streamNames);
+        % Gruppiere die Daten nach Streams
+        groupedData = struct();
+        for i = 1:length(uniqueStreams)
+          stream = uniqueStreams{i};
+          idx = strcmp(streamNames,stream);
+          % Speichere gruppierte Daten in der Struktur
+          groupedData.(stream).samples = samples(idx);
+          groupedData.(stream).timestamps = timestamps(idx);
+        endfor
+        % Aufruf für jeden Stream nur einmal
+        for k = 1:length(uniqueStreams)
+          j = self.streamSelector(stream);
+          % Übergabe der gesamten Liste auf einmal an addSample
+          dataStream(j).addSample(groupedData.(stream).samples,groupedData.(stream).timestamps);
+        endfor
+      endif
     endfunction
 
     function createRegEx(self,dataStream)
