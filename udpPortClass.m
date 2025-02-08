@@ -51,10 +51,10 @@ classdef udpPortClass < handle
       endif
       for i = 1:countMatches
         streamName = matches{i}{1};
-        adc        = str2double(matches{i}{2});
-        sample_t   = str2double(matches{i}{3});
-        j = self.streamSelector(streamName);     # Sample wird auf den passenden dataStream geleitet
-        dataStream(j).addSample(adc,sample_t);   # Hier uebernimmt der jeweilige dataStream
+        sample     = str2double(matches{i}{2});
+        timestamp  = str2double(matches{i}{3});
+        j = self.streamSelector(streamName);         # Sample wird auf den passenden dataStream geleitet
+        dataStream(j).addSample(sample,timestamp);   # Hier uebernimmt der jeweilige dataStream
       endfor
     endfunction
 

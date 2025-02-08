@@ -4,7 +4,7 @@
 #  ================================================
 pkg load instrument-control;
 clear all; clc;
-
+#profile on
 #inputDevice = "serial";
 inputDevice = "udp";
 
@@ -35,7 +35,7 @@ inputPort.createRegEx(dataStream);            # >> inputPort.regex_pattern
 
 # Globale Variablen zur Programmsteuerung
 # fuer Test mit FIR-Filter sind alle IIR-Filter zunaechst deaktiviert
-global HP_filtered = 1 NO_filtered = 1 TP_filtered = 1 DQ_filtered = 0 DQ2_filtered = 0;
+global HP_filtered = 1 NO_filtered = 1 TP_filtered = 1 AM_filtered = 1;
 # und FIR-Filter ist aktiviert
 global FIR_filtered = 0;
 
@@ -152,4 +152,5 @@ if !isempty(inputPort)
   until(quit_prg);
   clear inputPort;
 endif
+profile off
 

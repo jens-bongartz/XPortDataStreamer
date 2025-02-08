@@ -9,22 +9,25 @@ classdef dataStreamClass < handle
         t         = []; t_actual  = 0;
         plotwidth = 800; plot     = 1; plcolor   = "";
         ylim      = 0;    #yalternativ lim = [0 100];
-        ylim      = [-50 150];    #yalternativ lim = [0 100];
+        ylim      = [-100 100];    #yalternativ lim = [0 100];
         filter    = 1;
         # Filter-Speicher
         HP_sp  = [0 0 0 0 0 0]; NO_sp  = [0 0 0 0 0 0]; TP_sp  = [0 0 0 0 0 0];
-        DQ_sp  = [0 0 0 0 0 0]; DQ2_sp = [0 0 0 0 0 0];
         FIR_sp = [0];
         # Filter-Koeffizienten
         HP_ko  = [0 0 0 0 0]; NO_ko   = [0 0 0 0 0]; TP_ko  = [0 0 0 0 0];
-        DQ_ko  = [0 0 0 0 0]; DQ2_ko  = [0 0 0 0 0];
         FIR_ko = [0];
-        # median / mean_filter
-        bufsize = 5;
-        median_index = 1;
-        median_buffer = zeros(1,5);
-        mean_index = 1;
-        mean_buffer = zeros(1,5);
+
+        meanWindow     = 15;
+        meanValue      = 0;
+
+        maxWindow      = 300;
+        maxValue       = 0;
+        maxIndexList   = [];
+        maxValueList   = [];
+
+        peakTriggerIdx = 0;
+        peakWidth      = 25;
 
         slopeDetector = 0; lastSample = 0; lastSlope = 1; lastMaxTime = 0;
         peakDetector = 0; peakThreshold = 0; peakTrigger = 0; lastPeakTime  = 0;
@@ -54,8 +57,8 @@ classdef dataStreamClass < handle
           self.HP_ko = calcHPCoeff(f_abtast,f_HP);
           self.NO_ko = calcNotchCoeff(f_abtast,f_NO);
           self.TP_ko = calcTPCoeff(f_abtast,f_TP);
-          self.DQ_ko  = [1 -1 0 0 0];                   # (x[n]-x[n-1])/1
-          self.DQ2_ko = [1 0 -1 0 0];                   # (x[n]-x[n-2])/(2) (1)
+          ##self.DQ_ko  = [1 -1 0 0 0];                   # (x[n]-x[n-1])/1
+          ##self.DQ2_ko = [1 0 -1 0 0];                   # (x[n]-x[n-2])/(2) (1)
         endfunction
 
         function createFIRFilter(self,fa,df,f1,f2)
@@ -66,21 +69,19 @@ classdef dataStreamClass < handle
           # beide Vektoren sind persistent mit dem dataStream Objekt
         endfunction
 
-        function addSample(self,sample,sample_t)
+        function addSample(self,sample,timestamp)
 
           if (self.filter > 0)
-            sample = self.doFilter(sample);
+            sample = self.doFilter(sample);  # hier laufen alle Samples durch
           endif
 
           if (abs(sample) < 0.0001)        # 'dataaspectratio' Error verhindern
             sample = 0;
           endif
-          #disp(self.ar_index);
-          #disp(sample);
-          self.array(self.ar_index)=sample;
 
-          self.t_actual = sample_t;
-          self.t(self.ar_index) = sample_t;
+          self.array(self.ar_index)  = sample;
+          self.t(self.ar_index)      = timestamp;
+          self.t_actual              = timestamp;
 
           self.index = self.index + 1;
           # Ringspeicher Indexing
@@ -105,6 +106,19 @@ classdef dataStreamClass < handle
           self.lastSample = sample;
         endfunction
 
+
+        # Returns the value n samples before the current
+        function sample = getSample(self,n)
+          if (self.ar_index - n > 0)          # kein Wrap-Around notwendig
+            sample = self.array(self.ar_index-n);
+          else                                 # n > ar_index >> Wrap-Around
+            n1 = n - self.ar_index;
+            sample = self.array(self.length-n1);
+          endif
+        endfunction
+
+
+        # Returns the n last samples
         function [ret_array, ret_time] = lastSamples(self,n)
           if (self.ar_index - n > 0)          # kein Wrap-Around notwendig
             ret_array = self.array(self.ar_index-n:self.ar_index-1);
@@ -118,9 +132,10 @@ classdef dataStreamClass < handle
           endif
         endfunction
 
+
         function sample = doFilter(self,sample)
           # Statusvariablen ob Filter gesetzt sind
-          global HP_filtered NO_filtered TP_filtered DQ_filtered DQ2_filtered FIR_filtered;
+          global HP_filtered NO_filtered TP_filtered AM_filtered FIR_filtered;
           # am 22.11.2024 FIR Filteroption hinzugefuegt
           if (FIR_filtered)
             # FIR-Eingangsbuffer wird veschoben und mit neuem Sample ergaenzt
@@ -128,9 +143,7 @@ classdef dataStreamClass < handle
             # Filter entspricht Skalarprodukt von Eingangsbuffer und Filterkoeff.
             sample = dot(self.FIR_sp,self.FIR_ko);
           endif
-          #  Am 30.10.2023 Reihenfolge der digitalen Filter verändert
-          #  ist: NO > TP > HP
-          #  war: HP > NO > TP
+
           if (NO_filtered)
             [sample,self.NO_sp] = biquadFilter(sample,self.NO_sp,self.NO_ko);
            endif
@@ -140,25 +153,38 @@ classdef dataStreamClass < handle
            if (HP_filtered)
              [sample,self.HP_sp] = biquadFilter(sample,self.HP_sp,self.HP_ko);
            endif
-           if (DQ_filtered)
-             #[sample,self.DQ_sp] = biquadFilter(sample,self.DQ_sp,self.DQ_ko);
-             self.median_buffer(self.median_index) = sample;
-             sample = median(self.median_buffer);
-             self.median_index += 1;
-             if self.median_index > self.bufsize
-               self.median_index = 1;
-             endif
+           # Adaptive Mean-Filter
+           # ====================
+           # inkrementeller Mittelwert >> meanWindow
+           self.meanValue = self.meanValue + (sample - self.getSample(self.meanWindow)) / self.meanWindow;
+
+           # inkrementeller Maxfilter
+           self.maxValueList(self.index) = sample;
+           if ~isempty(self.maxIndexList) && (self.maxIndexList(1) < self.index - self.maxWindow)
+             self.maxIndexList(1) = [];
            endif
-           if (DQ2_filtered)
-             #[sample,self.DQ2_sp] = biquadFilter(sample,self.DQ2_sp,self.DQ2_ko);
-             self.mean_buffer(self.mean_index) = sample;
-             sample = mean(self.mean_buffer);
-             self.mean_index += 1;
-             if self.mean_index > self.bufsize
-               self.mean_index = 1;
+           while ~isempty(self.maxIndexList) && self.maxValueList(self.maxIndexList(end)) < sample
+             self.maxIndexList(end) = [];
+           endwhile
+           self.maxIndexList(end+1) = self.index;
+           self.maxValue = self.maxValueList(self.maxIndexList(1));
+           #########################
+           if (AM_filtered)
+             if (self.index - self.peakTriggerIdx > self.peakWidth)
+               if (abs(sample - self.meanValue) > self.maxValue / 3)
+                  sample = sample;
+                  self.peakTriggerIdx = self.index;
+               else
+                  sample = self.meanValue;
+               endif
+             else
+                  ##disp(self.index);
+                  sample = sample;
              endif
            endif
         endfunction
+
+        ########################################################################
 
         function slopeDetectorFunction(self,sample)
           slope = sign(sample - self.lastSample);
