@@ -73,7 +73,7 @@ classdef udpPortClass < handle
         for k = 1:length(uniqueStreams)
           j = self.streamSelector(stream);
           % Übergabe der gesamten Liste auf einmal an addSample
-          dataStream(j).addSample(groupedData.(stream).samples,groupedData.(stream).timestamps);
+          dataStream(j).addSamples(groupedData.(stream).samples,groupedData.(stream).timestamps);
         endfor
       endif
     endfunction

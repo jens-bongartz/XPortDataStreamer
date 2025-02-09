@@ -11,7 +11,8 @@ classdef plotGraphClass < handle
       graphics_toolkit("qt");
       self.fi_1 = figure(1);
       pos = get(self.fi_1,"outerposition");
-      set(self.fi_1,"outerposition", [pos(1),pos(2),1000,1000]);
+      #set(self.fi_1,"outerposition", [pos(1),pos(2),1000,1000]);
+      #set(self.fi_1,"outerposition", [pos(1),pos(2),300,300]);
       spN = 0;
       for i = 1:length(dataStream);
         if (dataStream(i).plot == 1)
@@ -59,9 +60,11 @@ classdef plotGraphClass < handle
           if (ishandle(self.fi_1))
             set(self.subPl(j),"xlim",x_axis);
             set(self.subLi(j),"xdata",data_t,"ydata",adc_plot);
-            if (dataStream(i).slopeDetector || dataStream(i).peakDetector)
+            set(self.subPl(j),"fontsize",20);
+            if (dataStream(i).newBMP)
               titleText = strcat("BPM:",num2str(dataStream(i).BPM));
-              set(self.subPl(j),"title",titleText,"fontsize",20);
+              set(self.subPl(j),"title",titleText);
+              dataStream(i).newBMP = 0;
             endif
           endif
         endif # (dataStream(i).plot==1)

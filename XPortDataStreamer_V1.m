@@ -1,31 +1,25 @@
-#          XPortDataStreamer V 1.1  (XPDS)
+#          XPortDataStreamer V 1.1 beta  (XPDS)
 #  (c) Jens Bongartz, 2025, Hochschule Koblenz
 #                Stand: 04.02.2025
 #  ================================================
 pkg load instrument-control;
+pkg load signal;
+
 clear all; clc;
 #profile on
 #inputDevice = "serial";
 inputDevice = "udp";
 
 # obj = dataStreamClass(name,plcolor,dt,plotwidth,plot,filter)
-# createFilter(f_abtast,f_HP,f_NO,f_TP)
 dataStream(1) = dataStreamClass("FBT","red",800,1,1); # externe Klasse
-#dataStream(2) = dataStreamClass("FBT","blue",800,1,1); # externe Klasse
 # createIIRFilter(f_abtast,f_HP,f_NO,f_TP)
 dataStream(1).createIIRFilter(200,2,50,40);
-#dataStream(2).createIIRFilter(200,4,50,20);
-# createFIRFilter(f_abtast,df,f1,f2)
-dataStream(1).createFIRFilter(200,2,1,40);
-#dataStream(2).createFIRFilter(200,2,1,45);
-
-dataStream(1).peakDetector  = 1;
-dataStream(1).evalWindow    = 200;
 
 if strcmp(inputDevice,"serial")
    baudrate = 115200;
    inputPort = serialPortClass(baudrate);
 endif
+
 if strcmp(inputDevice,"udp")
    inputPort = udpPortClass();                   # externe Klasse
 endif
@@ -45,16 +39,15 @@ global quit_prg = 0 clear_data = 0 save_data = 0 rec_data = 1;
 Bench_Time   = 2;       # measurment of load every 2 seconds
 Plot_Time    = 0.03;
 Port_Time    = 0.03;    # alle 30ms (33 Hz) werden Daten empfangen
-#Pause_Time   = 0.02;
-Pause_Time   = 0.0;
+Pause_Time   = 0.02;
+#Pause_Time   = 0.0;
 
 # Der weitere Teil wird nur ausgefuehrt, wenn serielle Schnittstelle gefunden wurde
 if !isempty(inputPort)
   # Graphikfenster initialisieren
   plotGraph = plotGraphClass(dataStream);       # externe Klasse
   cap = GUI_Elements(plotGraph.fi_1);           # externe Funktion
-  displayInfo(plotGraph.fi_1);          clear inppu
-        # externe Funktion
+  displayInfo(plotGraph.fi_1);                  # externe Funktion
   inputPort.clearPort();                        # externe Klasse
   # Hauptschleife
   # =============

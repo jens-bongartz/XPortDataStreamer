@@ -6,34 +6,45 @@ classdef dataStreamClass < handle
         # index    >> Counter fuer alle Abtastwerte des dataStream
         name      = "";
         array     = []; ar_index  = 1; length = 2000; index = 1;
-        t         = []; t_actual  = 0;
+        t         = [];
         plotwidth = 800; plot     = 1; plcolor   = "";
         ylim      = 0;    #yalternativ lim = [0 100];
         ylim      = [-100 100];    #yalternativ lim = [0 100];
         filter    = 1;
-        # Filter-Speicher
-        HP_sp  = [0 0 0 0 0 0]; NO_sp  = [0 0 0 0 0 0]; TP_sp  = [0 0 0 0 0 0];
-        FIR_sp = [0];
-        # Filter-Koeffizienten
-        HP_ko  = [0 0 0 0 0]; NO_ko   = [0 0 0 0 0]; TP_ko  = [0 0 0 0 0];
-        FIR_ko = [0];
 
-        meanWindow     = 15;
-        meanValue      = 0;
+        HP_nr_ko = [0 0 0];
+        HP_re_ko = [1 0 0];
+        HP_filt_sp = [0 0];
 
-        maxWindow      = 300;
-        maxValue       = 0;
-        maxIndexList   = [];
-        maxValueList   = [];
+        TP_nr_ko = [0 0 0];
+        TP_re_ko = [1 0 0];
+        TP_filt_sp = [0 0];
 
-        peakTriggerIdx = 0;
-        peakWidth      = 25;
+        NO_nr_ko = [0 0 0];
+        NO_re_ko = [1 0 0];
+        NO_filt_sp = [0 0];
 
-        slopeDetector = 0; lastSample = 0; lastSlope = 1; lastMaxTime = 0;
-        peakDetector = 0; peakThreshold = 0; peakTrigger = 0; lastPeakTime  = 0;
+        # Echtzeit-Signalanalyse
+        fs = 200; % Abtastrate in Hz
+        window_size = 0; % Gleitender Mittelwert über 150 ms
+        inhibit_time = 0; % Filteraussetzung für 100 ms nach R-Zacke
+        max_window_size = 0; % Fenstergröße für das iterative Maximum über die letzten 2 Sekunden
+        dynamic_threshold = 0;
+        rr_interval = 0;
 
-        evalCounter = 0; evalWindow = 200;
+        buffer           = [];
+        buffer_index     = 1;
+        sum_val          = 0;
+        filter_disable   = false;
+        inhibit_counter  = 0;
+        last_r_peak_time = 0;
+        prev_r_peak_time = 0;
+        bpm_values       = [];
+        max_buffer       = [];
+        max_index        = 1;
+
         BPM = 0;
+        newBMP = 0;
     endproperties
 
     methods (Access=public)
@@ -45,6 +56,14 @@ classdef dataStreamClass < handle
           self.plot      = plot;
           self.filter    = filter;
           self.initRingBuffer();
+
+          self.fs = 200; % Abtastrate in Hz
+          self.window_size = round(0.2 * self.fs); % Gleitender Mittelwert über 150 ms
+          self.inhibit_time = round(0.05 * self.fs); % Filteraussetzung für 100 ms nach R-Zacke
+          self.max_window_size = round(2 * self.fs); % Fenstergröße für das iterative Maximum über die letzten 2 Sekunden
+
+          self.buffer = zeros(self.window_size, 1);
+          self.max_buffer = zeros(self.max_window_size, 1);
         endfunction
 
         function initRingBuffer(self)
@@ -54,11 +73,13 @@ classdef dataStreamClass < handle
         endfunction
 
         function createIIRFilter(self,f_abtast,f_HP,f_NO,f_TP)
-          self.HP_ko = calcHPCoeff(f_abtast,f_HP);
-          self.NO_ko = calcNotchCoeff(f_abtast,f_NO);
-          self.TP_ko = calcTPCoeff(f_abtast,f_TP);
-          ##self.DQ_ko  = [1 -1 0 0 0];                   # (x[n]-x[n-1])/1
-          ##self.DQ2_ko = [1 0 -1 0 0];                   # (x[n]-x[n-2])/(2) (1)
+          fa_2 = f_abtast / 2;
+          # Tiefpass-IIR-Filter
+          [self.TP_nr_ko, self.TP_re_ko] = butter(2,f_TP/fa_2,"low");
+          # Hochpass-IIR-Filter
+          [self.HP_nr_ko, self.HP_re_ko] = butter(2,f_HP/fa_2,"high");
+          # Notch-IIR Filter
+          [self.NO_nr_ko, self.NO_re_ko] = pei_tseng_notch(f_NO/fa_2, 2/fa_2);
         endfunction
 
         function createFIRFilter(self,fa,df,f1,f2)
@@ -69,23 +90,74 @@ classdef dataStreamClass < handle
           # beide Vektoren sind persistent mit dem dataStream Objekt
         endfunction
 
-        function addSample(self,samples,timestamps)
+        function addSamples(self,samples,timestamps)
+          global HP_filtered NO_filtered TP_filtered AM_filtered FIR_filtered;
+          std_sig = std(samples);
+          #disp(std_sig);
+          if (std_sig < 100)   # Signal prüfen
+
+          if (NO_filtered)
+            [samples, self.NO_filt_sp] = filter(self.NO_nr_ko, self.NO_re_ko,samples,self.NO_filt_sp);
+          endif
+          if (TP_filtered)
+            [samples, self.TP_filt_sp] = filter(self.TP_nr_ko, self.TP_re_ko,samples,self.TP_filt_sp);
+          endif
+          if (HP_filtered)
+            [samples, self.HP_filt_sp] = filter(self.HP_nr_ko, self.HP_re_ko,samples,self.HP_filt_sp);
+          endif
+
+          samples(abs(samples)<0.0001)=0;
+
           for k = 1:length(samples)
 
             sample = samples(k);
             timestamp = timestamps(k);
 
-            if (self.filter > 0)
-              sample = self.doFilter(sample);  # hier laufen alle Samples durch
+            if (AM_filtered)
+            # Beginn der Echtzeit Signalanalyse
+
+            % Dynamische Berechnung des Schwellenwerts über die letzten 2 Sekunden
+            self.max_buffer(self.max_index) = sample;
+            self.max_index = mod(self.max_index, self.max_window_size) + 1;
+            self.dynamic_threshold = 0.3 * max(self.max_buffer); % Adaptives Maximum über die letzten 2 Sekunden
+            % R-Zacken-Erkennung
+            if sample > self.dynamic_threshold && (timestamp - self.last_r_peak_time) > 300 % Mindestens 300ms Abstand
+              self.prev_r_peak_time = self.last_r_peak_time;
+              self.last_r_peak_time = timestamp;
+               % BPM-Berechnung
+              if self.prev_r_peak_time > 0
+                 self.rr_interval = self.last_r_peak_time - self.prev_r_peak_time; % RR-Intervall in Sekunden
+                 self.BPM = round(60000 / self.rr_interval);
+                 self.newBMP = 1;
+                 #disp(self.BPM);
+              endif
+              % Mittelwertfilter temporär deaktivieren
+              self.filter_disable = true;
+              self.inhibit_counter = self.inhibit_time;
+            endif
+            % Timer für die Inhibit-Phase
+            if self.filter_disable && self.inhibit_counter > 0
+              self.inhibit_counter = self.inhibit_counter - 1;
+            else
+              self.filter_disable = false;
             endif
 
-            if (abs(sample) < 0.0001)        # 'dataaspectratio' Error verhindern
-              sample = 0;
+            % Adaptive Mittelwertfilterung
+            if self.filter_disable
+              sample = sample; % Kein Filter während Inhibit-Phase
+            else
+              self.sum_val = self.sum_val - self.buffer(self.buffer_index) + sample;
+              self.buffer(self.buffer_index) = sample;
+              sample = self.sum_val / self.window_size;
+              self.buffer_index = mod(self.buffer_index, self.window_size) + 1;
             endif
 
+            endif # if (AM_filtered)
+            # Ende der Echtzeit Signalanalyse
+
+            # Hier werden die Daten in den Ringspeicher geschrieben
             self.array(self.ar_index)  = sample;
             self.t(self.ar_index)      = timestamp;
-            self.t_actual              = timestamp;
 
             self.index = self.index + 1;
             # Ringspeicher Indexing
@@ -93,37 +165,11 @@ classdef dataStreamClass < handle
             if (self.ar_index > self.length)
               self.ar_index = 1;
             endif
-
-            # Peak-Detector
-            if (self.peakDetector)
-              self.evalCounter = self.evalCounter + 1;
-              # regelmaessig neu Threshold bestimmen
-              if (self.evalCounter > self.evalWindow)
-                self.evalThreshold;
-              endif
-              self.peakDetectorFunction(sample);
-            endif
-            # Slope-Detector
-            if (self.slopeDetector)
-              self.slopeDetectorFunction(sample);
-            endif
-            self.lastSample = sample;
           endfor
+          endif     # if (std_sig < 100)
         endfunction
 
-
-        # Returns the value n samples before the current
-        function sample = getSample(self,n)
-          if (self.ar_index - n > 0)          # kein Wrap-Around notwendig
-            sample = self.array(self.ar_index-n);
-          else                                 # n > ar_index >> Wrap-Around
-            n1 = n - self.ar_index;
-            sample = self.array(self.length-n1);
-          endif
-        endfunction
-
-
-        # Returns the n last samples
+        # Returns the n last samples >> draw-Routine
         function [ret_array, ret_time] = lastSamples(self,n)
           if (self.ar_index - n > 0)          # kein Wrap-Around notwendig
             ret_array = self.array(self.ar_index-n:self.ar_index-1);
@@ -137,100 +183,9 @@ classdef dataStreamClass < handle
           endif
         endfunction
 
-
-        function sample = doFilter(self,sample)
-          # Statusvariablen ob Filter gesetzt sind
-          global HP_filtered NO_filtered TP_filtered AM_filtered FIR_filtered;
-          # am 22.11.2024 FIR Filteroption hinzugefuegt
-          if (FIR_filtered)
-            # FIR-Eingangsbuffer wird veschoben und mit neuem Sample ergaenzt
-            self.FIR_sp = [sample self.FIR_sp(1:end-1)];
-            # Filter entspricht Skalarprodukt von Eingangsbuffer und Filterkoeff.
-            sample = dot(self.FIR_sp,self.FIR_ko);
-          endif
-
-          if (NO_filtered)
-            [sample,self.NO_sp] = biquadFilter(sample,self.NO_sp,self.NO_ko);
-           endif
-           if (TP_filtered)
-             [sample,self.TP_sp] = biquadFilter(sample,self.TP_sp,self.TP_ko);
-           endif
-           if (HP_filtered)
-             [sample,self.HP_sp] = biquadFilter(sample,self.HP_sp,self.HP_ko);
-           endif
-           # Adaptive Mean-Filter
-           # ====================
-           # inkrementeller Mittelwert >> meanWindow
-           self.meanValue = self.meanValue + (sample - self.getSample(self.meanWindow)) / self.meanWindow;
-
-           # inkrementeller Maxfilter
-           self.maxValueList(self.index) = sample;
-           if ~isempty(self.maxIndexList) && (self.maxIndexList(1) < self.index - self.maxWindow)
-             self.maxIndexList(1) = [];
-           endif
-           while ~isempty(self.maxIndexList) && self.maxValueList(self.maxIndexList(end)) < sample
-             self.maxIndexList(end) = [];
-           endwhile
-           self.maxIndexList(end+1) = self.index;
-           self.maxValue = self.maxValueList(self.maxIndexList(1));
-           #########################
-           if (AM_filtered)
-             if (self.index - self.peakTriggerIdx > self.peakWidth)
-               if (abs(sample - self.meanValue) > self.maxValue / 3)
-                  sample = sample;
-                  self.peakTriggerIdx = self.index;
-               else
-                  sample = self.meanValue;
-               endif
-             else
-                  ##disp(self.index);
-                  sample = sample;
-             endif
-           endif
-        endfunction
-
-        ########################################################################
-
-        function slopeDetectorFunction(self,sample)
-          slope = sign(sample - self.lastSample);
-          if (slope ~= self.lastSlope)
-            if (slope < self.lastSlope) # Ubergang 1 >> -1 = Maximum
-              if (self.t_actual - self.lastMaxTime > 50)
-               self.BPM = round(60000 / (self.t_actual - self.lastMaxTime));
-               self.lastMaxTime = self.t_actual;
-              endif
-            endif
-          endif
-          self.lastSlope  = slope;
-        endfunction
-
-        function evalThreshold(self)
-          evalArray = self.lastSamples(self.evalWindow);
-          if (max(evalArray) > 4*std(evalArray))
-             self.peakThreshold = 0.5*max(evalArray);
-          endif
-          self.evalCounter = 0;
-        endfunction
-
-        function peakDetectorFunction(self,sample)
-          # und Threshold vergleichen
-          if ((sample > self.peakThreshold) && !self.peakTrigger)
-            # Doppel-Peaks unterdruecken (50ms)
-            if (self.t_actual - self.lastPeakTime > 50)
-              self.BPM = round(60000 / (self.t_actual - self.lastPeakTime));
-              self.lastPeakTime = self.t_actual;
-              self.peakTrigger = 1;
-            endif
-          endif
-          if ((sample < self.peakThreshold) && self.peakTrigger)
-            self.peakTrigger = 0;
-          endif
-        endfunction
-
         function clear(self)
           self.index        = 1;
           self.ar_index     = 1;
-          self.t_actual     = 0;
           self.lastMaxTime  = 0;
           self.lastPeakTime = 0;
           self.initRingBuffer();
