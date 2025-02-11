@@ -66,6 +66,11 @@ classdef plotGraphClass < handle
               set(self.subPl(j),"title",titleText);
               dataStream(i).newBMP = 0;
             endif
+            if (dataStream(i).noSignal)
+              titleText = "No Signal";
+              set(self.subPl(j),"title",titleText);
+            endif
+
           endif
         endif # (dataStream(i).plot==1)
       endfor

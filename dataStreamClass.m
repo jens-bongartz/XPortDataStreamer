@@ -26,11 +26,11 @@ classdef dataStreamClass < handle
 
         # Echtzeit-Signalanalyse
         fs = 200; % Abtastrate in Hz
-        window_size = 0; % Gleitender Mittelwert über 150 ms
-        inhibit_time = 0; % Filteraussetzung für 100 ms nach R-Zacke
-        max_window_size = 0; % Fenstergröße für das iterative Maximum über die letzten 2 Sekunden
+        window_size      = 0;
+        inhibit_time     = 0;
+        max_window_size  = 0;
         dynamic_threshold = 0;
-        rr_interval = 0;
+        rr_interval      = 0;
 
         buffer           = [];
         buffer_index     = 1;
@@ -45,6 +45,7 @@ classdef dataStreamClass < handle
 
         BPM = 0;
         newBMP = 0;
+        noSignal = 0;
     endproperties
 
     methods (Access=public)
@@ -58,8 +59,8 @@ classdef dataStreamClass < handle
           self.initRingBuffer();
 
           self.fs = 200; % Abtastrate in Hz
-          self.window_size = round(0.2 * self.fs); % Gleitender Mittelwert über 150 ms
-          self.inhibit_time = round(0.05 * self.fs); % Filteraussetzung für 100 ms nach R-Zacke
+          self.window_size = round(0.2 * self.fs); % Gleitender Mittelwert über 200 ms
+          self.inhibit_time = round(0.05 * self.fs); % Filteraussetzung für 50 ms nach R-Zacke
           self.max_window_size = round(2 * self.fs); % Fenstergröße für das iterative Maximum über die letzten 2 Sekunden
 
           self.buffer = zeros(self.window_size, 1);
@@ -95,7 +96,7 @@ classdef dataStreamClass < handle
           std_sig = std(samples);
           #disp(std_sig);
           if (std_sig < 100)   # Signal prüfen
-
+          self.noSignal = 0;
           if (NO_filtered)
             [samples, self.NO_filt_sp] = filter(self.NO_nr_ko, self.NO_re_ko,samples,self.NO_filt_sp);
           endif
@@ -119,7 +120,7 @@ classdef dataStreamClass < handle
             % Dynamische Berechnung des Schwellenwerts über die letzten 2 Sekunden
             self.max_buffer(self.max_index) = sample;
             self.max_index = mod(self.max_index, self.max_window_size) + 1;
-            self.dynamic_threshold = 0.3 * max(self.max_buffer); % Adaptives Maximum über die letzten 2 Sekunden
+            self.dynamic_threshold = 0.6 * max(self.max_buffer); % Adaptives Maximum über die letzten 2 Sekunden
             % R-Zacken-Erkennung
             if sample > self.dynamic_threshold && (timestamp - self.last_r_peak_time) > 300 % Mindestens 300ms Abstand
               self.prev_r_peak_time = self.last_r_peak_time;
@@ -166,6 +167,8 @@ classdef dataStreamClass < handle
               self.ar_index = 1;
             endif
           endfor
+          else
+            self.noSignal = 1;
           endif     # if (std_sig < 100)
         endfunction
 
@@ -197,4 +200,3 @@ classdef dataStreamClass < handle
         endfunction
     endmethods
 end
-
